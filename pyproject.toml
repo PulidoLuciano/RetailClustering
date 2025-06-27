@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "RetailClustering"
+version = "0.1.0"
+description = "Clustering for online retail"
+readme = "README.md"
+authors = ["Luciano Pulido", "Joaquin Sarmiento"]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+dagster = "^1.10.14"
+dagster-webserver = "^1.10.14"
+pytest = "^8.3.5"
+jupyterlab = "^4.4.2"
+mlflow = "^2.22.0"
+dagstermill = "^0.26.14"
+seaborn = "^0.13.2"
+dagster-mlflow = "^0.26.15"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.dagster]
+module_name = "RetailClustering.definitions"
+project_name = "RetailClustering"
+
+[tool.setuptools.packages.find]
+exclude=["RetailClustering_tests"]
