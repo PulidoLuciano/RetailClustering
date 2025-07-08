@@ -1,9 +1,11 @@
 import dagster as dg
 import pandas as pd
-from .utils import delete_cancelled_orders, get_pca
+from .utils import delete_cancelled_orders, get_pca, plot_silhouette
 from os import path
 from dagstermill import define_dagstermill_asset
 from sklearn.metrics import silhouette_score
+import os
+
 RANDOM_STATE = 42
 
 @dg.asset(
@@ -91,12 +93,11 @@ def rfm_data(preprocessed_data: pd.DataFrame) -> pd.DataFrame:
     group_name="preprocessing",
 )
 def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
-    #from sklearn.preprocessing import StandardScaler
-    #scaler = StandardScaler()
-    #scaled_data = scaler.fit_transform(rfm_data[['Recency', 'Frequency', 'Monetary']])
-    #scaled_data = pd.DataFrame(scaled_data, columns=['Recency', 'Frequency', 'Monetary'])
-    #return scaled_data
-    return rfm_data
+    from sklearn.preprocessing import RobustScaler
+    scaler = RobustScaler()
+    scaled_data = scaler.fit_transform(rfm_data[['Recency', 'Frequency', 'Monetary']])
+    scaled_data = pd.DataFrame(scaled_data, columns=['Recency', 'Frequency', 'Monetary'])
+    return scaled_data
 
 @dg.asset(
     dagster_type=pd.DataFrame,
@@ -106,31 +107,42 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
 )
 def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.cluster import KMeans
+    from sklearn.metrics import davies_bouldin_score
     
-    N_CLUSTERS = 5
+    N_CLUSTERS = 3
     PCA_components = 2
     RUN_NAME = "only_rfm"
+
+    results_df = scaled_rfm_data.copy()
     
     mlflow = context.resources.mlflow_kmeans
     mlflow.set_tag("mlflow.runName", RUN_NAME)
     mlflow.log_params({"random_state": RANDOM_STATE, "PCA_components": PCA_components})
-    mlflow.log_params({"scaler": "-"})
+    mlflow.log_params({"scaler": "RobustScaler"})
 
     mlflow.autolog()
     kmeans = KMeans(n_clusters=N_CLUSTERS, random_state=RANDOM_STATE)
-    scaled_rfm_data['Cluster'] = kmeans.fit_predict(scaled_rfm_data)
-    print(scaled_rfm_data.head(5))
+    results_df['Cluster'] = kmeans.fit_predict(scaled_rfm_data)
 
-    pca_fig, sum_explained_variance = get_pca(scaled_rfm_data, PCA_components)
+    #Create cache folder if it doesn't exist
+    if not path.exists("cache"):
+        os.makedirs("cache")
+    
+    pca_fig, sum_explained_variance = get_pca(results_df, PCA_components)
     mlflow.log_metrics({"pca_explained_variance": sum_explained_variance})
     pca_fig.savefig("cache/pca_fig.png")
     mlflow.log_artifact("cache/pca_fig.png")
 
     mlflow.log_metrics({"inertia": kmeans.inertia_})
-    mlflow.log_metrics({"silhouette_score": silhouette_score(scaled_rfm_data[['Recency', 'Frequency', 'Monetary']], scaled_rfm_data['Cluster'])})
-    scaled_rfm_data.to_csv("cache/kmeans_model.csv")
+    mlflow.log_metrics({"davies_bouldin_score": davies_bouldin_score(scaled_rfm_data, results_df['Cluster'])})
+
+    silhouette_fig, silhouette_score = plot_silhouette(scaled_rfm_data, results_df['Cluster'])
+    mlflow.log_metrics({"silhouette_score": silhouette_score})
+    silhouette_fig.savefig("cache/silhouette_fig.png")
+    mlflow.log_artifact("cache/silhouette_fig.png")
+    
+    results_df.to_csv("cache/kmeans_model.csv")
     mlflow.log_artifact("cache/kmeans_model.csv")
-    mlflow.sklearn.log_model(kmeans, "kmeans_model")
 
     mlflow.end_run()
     return scaled_rfm_data

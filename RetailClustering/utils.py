@@ -1,7 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-
+from sklearn.metrics import silhouette_samples, silhouette_score
+import seaborn as sns
+import numpy as np
 def get_devolutions(df: pd.DataFrame) -> pd.DataFrame:
     devoluciones_df = df[df['Quantity'] < 0]
     return devoluciones_df
@@ -112,3 +114,35 @@ def plot_pca_clusters_figure(pca_df: pd.DataFrame, explained_variance: list, x_c
 
     return fig
 
+def plot_silhouette(X, labels):
+    silhouette_vals = silhouette_samples(X, labels)
+    silhouette_avg = silhouette_score(X, labels)
+    n_clusters = len(set(labels))
+    
+    fig, ax = plt.subplots(figsize=(8, 5))
+    y_lower = 10
+    for i in range(n_clusters):
+        ith_cluster_silhouette_values = silhouette_vals[labels == i]
+        ith_cluster_silhouette_values.sort()
+        size_cluster_i = ith_cluster_silhouette_values.shape[0]
+        y_upper = y_lower + size_cluster_i
+        
+        color = sns.color_palette("hsv", n_clusters)[i]
+        ax.fill_betweenx(
+            np.arange(y_lower, y_upper),
+            0,
+            ith_cluster_silhouette_values,
+            facecolor=color,
+            edgecolor=color,
+            alpha=0.7
+        )
+        ax.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i))
+        y_lower = y_upper + 10
+
+    ax.set_title("Silhouette Plot")
+    ax.set_xlabel("Silhouette Coefficient Values")
+    ax.set_ylabel("Cluster")
+    ax.axvline(x=silhouette_avg, color="red", linestyle="--")
+    ax.set_yticks([])
+    
+    return fig, silhouette_avg
