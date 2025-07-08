@@ -12,3 +12,4 @@ dist/
 mlruns/
 .env
 mlflow-server/
+cache/
