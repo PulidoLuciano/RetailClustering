@@ -89,11 +89,23 @@ def rfm_data(preprocessed_data: pd.DataFrame) -> pd.DataFrame:
     group_name="preprocessing",
 )
 def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
-    from sklearn.preprocessing import StandardScaler
-    scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(rfm_data[['Recency', 'Frequency', 'Monetary']])
-    scaled_data = pd.DataFrame(scaled_data, columns=['Recency', 'Frequency', 'Monetary'])
-    return scaled_data
+    #from sklearn.preprocessing import StandardScaler
+    #scaler = StandardScaler()
+    #scaled_data = scaler.fit_transform(rfm_data[['Recency', 'Frequency', 'Monetary']])
+    #scaled_data = pd.DataFrame(scaled_data, columns=['Recency', 'Frequency', 'Monetary'])
+    #return scaled_data
+    return rfm_data
+
+@dg.asset(
+    dagster_type=pd.DataFrame,
+    description="Clustering the RFM data with KMeans",
+    group_name="clustering",
+)
+def clustered_kmeans_data(scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
+    from sklearn.cluster import KMeans
+    kmeans = KMeans(n_clusters=5, random_state=RANDOM_STATE)
+    scaled_rfm_data['Cluster'] = kmeans.fit_predict(scaled_rfm_data[['Recency', 'Frequency', 'Monetary']])
+    return scaled_rfm_data
 
 
 
