@@ -4,6 +4,8 @@ from .utils import delete_cancelled_orders
 from os import path
 from dagstermill import define_dagstermill_asset
 
+RANDOM_STATE = 42
+
 @dg.asset(
     dagster_type=pd.DataFrame,
     description="Raw data from the online retail dataset",
@@ -55,3 +57,43 @@ rfm_definitions_nb = define_dagstermill_asset(
     group_name="preprocessing",
     ins={"preprocessed_data": dg.AssetIn(key=dg.AssetKey("preprocessed_data"))},
 )
+
+@dg.asset(
+    dagster_type=pd.DataFrame,
+    description="Data with the RFM features",
+    group_name="preprocessing",
+)
+def rfm_data(preprocessed_data: pd.DataFrame) -> pd.DataFrame:
+    # Recency
+    fecha_referencia = preprocessed_data['InvoiceDate'].max() + pd.Timedelta(days=1)
+    recency_df = preprocessed_data.groupby('CustomerID')['InvoiceDate'].max().reset_index()
+    recency_df['Recency'] = (fecha_referencia - recency_df['InvoiceDate']).dt.days
+
+    # Frequency
+    frequency_df = preprocessed_data.groupby('CustomerID')['InvoiceNo'].nunique().reset_index()
+    frequency_df.rename(columns={'InvoiceNo': 'Frequency'}, inplace=True)
+
+    #Monetary
+    monetary_df = preprocessed_data.groupby('CustomerID')['TotalPrice'].sum().reset_index()
+    monetary_df.rename(columns={'TotalPrice': 'Monetary'}, inplace=True)
+
+    #Merge
+    rfm_df = recency_df.merge(frequency_df, on='CustomerID')
+    rfm_df = rfm_df.merge(monetary_df, on='CustomerID')
+
+    return rfm_df
+
+@dg.asset(
+    dagster_type=pd.DataFrame,
+    description="Scaled and transformed RFM data for clustering",
+    group_name="preprocessing",
+)
+def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(rfm_data[['Recency', 'Frequency', 'Monetary']])
+    scaled_data = pd.DataFrame(scaled_data, columns=['Recency', 'Frequency', 'Monetary'])
+    return scaled_data
+
+
+
