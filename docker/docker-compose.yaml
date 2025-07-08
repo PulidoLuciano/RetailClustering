@@ -19,8 +19,7 @@ services:
     depends_on:
       - postgres
     volumes:
-      - mlflow_artifacts:/mlruns
+      - ./mlflow_artifacts:/artifacts
 
 volumes:
   postgres_data:
-  mlflow_artifacts:
