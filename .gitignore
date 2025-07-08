@@ -1,0 +1,11 @@
+/.tmp*
+/.ipynb_checkpoints
+__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env/
+build/
+dist/
