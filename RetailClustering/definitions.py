@@ -10,10 +10,9 @@ defs = Definitions(
     assets=all_assets,
     resources={
         "output_notebook_io_manager": ConfigurableLocalOutputNotebookIOManager(),
-        "ml_flow_kmeans": mlflow_tracking.configured({
+        "mlflow_kmeans": mlflow_tracking.configured({
             "experiment_name": "kmeans_clustering",
-            "run_name": "kmeans_clustering_run",
-            "mlflow_tracking_uri": "http://localhost:5000"
+            "mlflow_tracking_uri": "http://localhost:5000",
         })
     }
 )

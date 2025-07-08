@@ -1,9 +1,9 @@
 import dagster as dg
 import pandas as pd
-from .utils import delete_cancelled_orders
+from .utils import delete_cancelled_orders, get_pca
 from os import path
 from dagstermill import define_dagstermill_asset
-
+from sklearn.metrics import silhouette_score
 RANDOM_STATE = 42
 
 @dg.asset(
@@ -80,6 +80,8 @@ def rfm_data(preprocessed_data: pd.DataFrame) -> pd.DataFrame:
     #Merge
     rfm_df = recency_df.merge(frequency_df, on='CustomerID')
     rfm_df = rfm_df.merge(monetary_df, on='CustomerID')
+    rfm_df.drop(columns=['InvoiceDate'], inplace=True)
+    rfm_df = rfm_df.set_index('CustomerID')
 
     return rfm_df
 
@@ -100,11 +102,37 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
     dagster_type=pd.DataFrame,
     description="Clustering the RFM data with KMeans",
     group_name="clustering",
+    required_resource_keys={"mlflow_kmeans"},
 )
-def clustered_kmeans_data(scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
+def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.cluster import KMeans
-    kmeans = KMeans(n_clusters=5, random_state=RANDOM_STATE)
-    scaled_rfm_data['Cluster'] = kmeans.fit_predict(scaled_rfm_data[['Recency', 'Frequency', 'Monetary']])
+    
+    N_CLUSTERS = 5
+    PCA_components = 2
+    RUN_NAME = "only_rfm"
+    
+    mlflow = context.resources.mlflow_kmeans
+    mlflow.set_tag("mlflow.runName", RUN_NAME)
+    mlflow.log_params({"random_state": RANDOM_STATE, "PCA_components": PCA_components})
+    mlflow.log_params({"scaler": "-"})
+
+    mlflow.autolog()
+    kmeans = KMeans(n_clusters=N_CLUSTERS, random_state=RANDOM_STATE)
+    scaled_rfm_data['Cluster'] = kmeans.fit_predict(scaled_rfm_data)
+    print(scaled_rfm_data.head(5))
+
+    pca_fig, sum_explained_variance = get_pca(scaled_rfm_data, PCA_components)
+    mlflow.log_metrics({"pca_explained_variance": sum_explained_variance})
+    pca_fig.savefig("cache/pca_fig.png")
+    mlflow.log_artifact("cache/pca_fig.png")
+
+    mlflow.log_metrics({"inertia": kmeans.inertia_})
+    mlflow.log_metrics({"silhouette_score": silhouette_score(scaled_rfm_data[['Recency', 'Frequency', 'Monetary']], scaled_rfm_data['Cluster'])})
+    scaled_rfm_data.to_csv("cache/kmeans_model.csv")
+    mlflow.log_artifact("cache/kmeans_model.csv")
+    mlflow.sklearn.log_model(kmeans, "kmeans_model")
+
+    mlflow.end_run()
     return scaled_rfm_data
 
 

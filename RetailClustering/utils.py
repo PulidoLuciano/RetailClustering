@@ -1,4 +1,6 @@
 import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 
 def get_devolutions(df: pd.DataFrame) -> pd.DataFrame:
     devoluciones_df = df[df['Quantity'] < 0]
@@ -56,3 +58,57 @@ def delete_cancelled_orders(df: pd.DataFrame) -> pd.DataFrame:
 
     # Filtramos las filas que no están en productos_devueltos
     return df[~df.apply(lambda row: (row['InvoiceNo'], row['StockCode']) in productos_devueltos, axis=1)]
+
+def get_pca(data: pd.DataFrame, n_components: int):
+    """
+    Toma los datos y los reduce a n_components componentes principales.
+
+    Parámetros:
+    - df: DataFrame con columnas para PC1, PC2 y la columna de clusters.
+    - n_components: número de componentes principales.
+
+    Retorna:
+    - fig: objeto matplotlib.figure.Figure
+    - sum_explained_variance: suma de los explained_variance_ratio_
+    """
+    from sklearn.decomposition import PCA
+    df = data.copy()
+    df.drop(columns=['Cluster'], inplace=True)
+    pca = PCA(n_components=n_components)
+    pca_data = pca.fit_transform(df)
+    pca_results = pd.DataFrame(pca_data, columns=[f'PC{i+1}' for i in range(n_components)], index=data.index)
+    pca_results['Cluster'] = data['Cluster']
+    print(pca_results.head(5))
+    fig = plot_pca_clusters_figure(pca_results, pca.explained_variance_ratio_)
+    sum_explained_variance = sum(pca.explained_variance_ratio_)
+    return fig, sum_explained_variance
+
+def plot_pca_clusters_figure(pca_df: pd.DataFrame, explained_variance: list, x_col="PC1", y_col="PC2", cluster_col="Cluster") -> Figure:
+    """
+    Genera una figura de Matplotlib con los clusters visualizados en el espacio PCA.
+
+    Parámetros:
+    - pca_df: DataFrame con columnas para PC1, PC2 y la columna de clusters.
+    - x_col, y_col: nombres de las columnas para los ejes x e y.
+    - cluster_col: nombre de la columna que contiene la asignación de clusters.
+
+    Retorna:
+    - fig: objeto matplotlib.figure.Figure
+    """
+    # Crear figura y ejes
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # Graficar cada cluster
+    for cluster in sorted(pca_df[cluster_col].unique()):
+        subset = pca_df[pca_df[cluster_col] == cluster]
+        ax.scatter(subset[x_col], subset[y_col], label=f"Cluster {cluster}", alpha=0.6)
+
+    # Configurar ejes y leyenda
+    ax.set_title("Clusters visualizados en espacio PCA")
+    ax.set_xlabel(f'{x_col} ({explained_variance[0]})')
+    ax.set_ylabel(f'{y_col} ({explained_variance[1]})')
+    ax.legend()
+    ax.grid(True)
+
+    return fig
+
