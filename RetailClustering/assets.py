@@ -6,8 +6,6 @@ from dagstermill import define_dagstermill_asset
 from sklearn.metrics import silhouette_score
 import os
 
-RANDOM_STATE = 42
-
 @dg.asset(
     dagster_type=pd.DataFrame,
     description="Raw data from the online retail dataset",
@@ -93,8 +91,8 @@ def rfm_data(preprocessed_data: pd.DataFrame) -> pd.DataFrame:
     group_name="preprocessing",
 )
 def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
-    from sklearn.preprocessing import RobustScaler
-    scaler = RobustScaler()
+    from sklearn.preprocessing import QuantileTransformer
+    scaler = QuantileTransformer(output_distribution='normal')
     scaled_data = scaler.fit_transform(rfm_data[['Recency', 'Frequency', 'Monetary']])
     scaled_data = pd.DataFrame(scaled_data, columns=['Recency', 'Frequency', 'Monetary'])
     return scaled_data
@@ -108,8 +106,8 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
 def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.cluster import KMeans
     from sklearn.metrics import davies_bouldin_score
-    
-    N_CLUSTERS = 3
+    from sklearn.utils import check_random_state
+    N_CLUSTERS = 6
     PCA_components = 2
     RUN_NAME = "only_rfm"
 
@@ -117,11 +115,11 @@ def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd
     
     mlflow = context.resources.mlflow_kmeans
     mlflow.set_tag("mlflow.runName", RUN_NAME)
-    mlflow.log_params({"random_state": RANDOM_STATE, "PCA_components": PCA_components})
-    mlflow.log_params({"scaler": "RobustScaler"})
+    mlflow.log_params({"PCA_components": PCA_components})
+    mlflow.log_params({"scaler": "QuantileTransformer"})
 
     mlflow.autolog()
-    kmeans = KMeans(n_clusters=N_CLUSTERS, random_state=RANDOM_STATE)
+    kmeans = KMeans(n_clusters=N_CLUSTERS)
     results_df['Cluster'] = kmeans.fit_predict(scaled_rfm_data)
 
     #Create cache folder if it doesn't exist
