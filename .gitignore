@@ -13,3 +13,4 @@ mlruns/
 .env
 mlflow-server/
 cache/
+mlflow_artifacts/
