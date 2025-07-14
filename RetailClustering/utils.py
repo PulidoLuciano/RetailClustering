@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-from sklearn.metrics import silhouette_samples, silhouette_score, davies_bouldin_score
+from sklearn.metrics import silhouette_samples, silhouette_score, davies_bouldin_score, calinski_harabasz_score
 import seaborn as sns
 import numpy as np
 from os import path, makedirs
@@ -255,6 +255,8 @@ def cluster_data(data: pd.DataFrame, model, run_name: str, mlflow):
     mlflow.log_artifact("cache/pca_fig.png")
 
     mlflow.log_metrics({"davies_bouldin_score": davies_bouldin_score(data, results_df['Cluster'])})
+
+    mlflow.log_metrics({"calinski_harabasz_score": calinski_harabasz_score(data, results_df['Cluster'])})
 
     silhouette_fig, silhouette_score = plot_silhouette(data, results_df['Cluster'])
     mlflow.log_metrics({"silhouette_score": silhouette_score})
