@@ -1,11 +1,8 @@
 import dagster as dg
 import pandas as pd
-from .utils import delete_cancelled_orders, get_pca, plot_silhouette
-from os import path
+from .utils import delete_cancelled_orders, cluster_data, plot_dendrogram
 from dagstermill import define_dagstermill_asset
-from sklearn.metrics import silhouette_score
-import os
-
+from os import path
 @dg.asset(
     dagster_type=pd.DataFrame,
     description="Raw data from the online retail dataset",
@@ -108,44 +105,48 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
 )
 def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.cluster import KMeans
-    from sklearn.metrics import davies_bouldin_score
+    mlflow = context.resources.mlflow_kmeans
     N_CLUSTERS = 4
-    PCA_components = 2
     RUN_NAME = "only_rfm"
 
-    results_df = scaled_rfm_data.copy()
-    
-    mlflow = context.resources.mlflow_kmeans
-    mlflow.set_tag("mlflow.runName", RUN_NAME)
-    mlflow.log_params({"PCA_components": PCA_components})
-    mlflow.log_params({"scaler": "RobustScaler"})
-
-    mlflow.autolog()
-    kmeans = KMeans(n_clusters=N_CLUSTERS)
-    results_df['Cluster'] = kmeans.fit_predict(scaled_rfm_data)
-
-    #Create cache folder if it doesn't exist
-    if not path.exists("cache"):
-        os.makedirs("cache")
-    
-    pca_fig, sum_explained_variance = get_pca(results_df, PCA_components)
-    mlflow.log_metrics({"pca_explained_variance": sum_explained_variance})
-    pca_fig.savefig("cache/pca_fig.png")
-    mlflow.log_artifact("cache/pca_fig.png")
-
-    mlflow.log_metrics({"inertia": kmeans.inertia_})
-    mlflow.log_metrics({"davies_bouldin_score": davies_bouldin_score(scaled_rfm_data, results_df['Cluster'])})
-
-    silhouette_fig, silhouette_score = plot_silhouette(scaled_rfm_data, results_df['Cluster'])
-    mlflow.log_metrics({"silhouette_score": silhouette_score})
-    silhouette_fig.savefig("cache/silhouette_fig.png")
-    mlflow.log_artifact("cache/silhouette_fig.png")
-    
-    results_df.to_csv("cache/kmeans_model.csv", index=True)
-    mlflow.log_artifact("cache/kmeans_model.csv")
-
+    model = KMeans(n_clusters=N_CLUSTERS)
+    results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
+    mlflow.log_metrics({"inertia": model.inertia_})
     mlflow.end_run()
-    return scaled_rfm_data
 
+    return results_df
 
+@dg.asset(
+    dagster_type=pd.DataFrame,
+    description="Clustering the RFM data with DBSCAN",
+    group_name="clustering",
+    required_resource_keys={"mlflow_dbscan"},
+)
+def clustered_dbscan_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
+    from sklearn.cluster import DBSCAN
+    mlflow = context.resources.mlflow_dbscan
+    RUN_NAME = "only_rfm"
+
+    model = DBSCAN(eps=0.5, min_samples=5)
+    results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
+    mlflow.end_run()
+    return results_df
+
+@dg.asset(
+    dagster_type=pd.DataFrame,
+    description="Clustering the RFM data with Agglomerative Clustering",
+    group_name="clustering",
+    required_resource_keys={"mlflow_agglomerative"},
+)
+def clustered_agglomerative_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
+    from sklearn.cluster import AgglomerativeClustering
+    mlflow = context.resources.mlflow_agglomerative
+    RUN_NAME = "only_rfm"
+
+    model = AgglomerativeClustering(n_clusters=4, linkage="ward", compute_distances=True)
+    results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
+    plot_dendrogram(model, mlflow)
+    mlflow.end_run()
+
+    return results_df
 

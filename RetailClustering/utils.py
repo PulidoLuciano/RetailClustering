@@ -1,9 +1,14 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-from sklearn.metrics import silhouette_samples, silhouette_score
+from sklearn.metrics import silhouette_samples, silhouette_score, davies_bouldin_score
 import seaborn as sns
 import numpy as np
+from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
+import dagster as dg
+from os import path, makedirs
+from scipy.cluster.hierarchy import dendrogram
+
 def get_devolutions(df: pd.DataFrame) -> pd.DataFrame:
     devoluciones_df = df[df['Quantity'] < 0]
     return devoluciones_df
@@ -147,6 +152,30 @@ def plot_silhouette(X, labels):
     
     return fig, silhouette_avg
 
+def plot_dendrogram(model, mlflow, **kwargs):
+    # Create linkage matrix and then plot the dendrogram
+
+    # create the counts of samples under each node
+    counts = np.zeros(model.children_.shape[0])
+    n_samples = len(model.labels_)
+    for i, merge in enumerate(model.children_):
+        current_count = 0
+        for child_idx in merge:
+            if child_idx < n_samples:
+                current_count += 1  # leaf node
+            else:
+                current_count += counts[child_idx - n_samples]
+        counts[i] = current_count
+
+    linkage_matrix = np.column_stack(
+        [model.children_, model.distances_, counts]
+    ).astype(float)
+
+    # Plot the corresponding dendrogram
+    dendrogram(linkage_matrix, **kwargs)
+    plt.savefig("cache/dendrogram.png")
+    mlflow.log_artifact("cache/dendrogram.png")
+
 def winsorize_by_percentile(data, lower_percentile=5, upper_percentile=95):
     """
     Aplica winsorización a un DataFrame o a una Serie de Pandas.
@@ -203,3 +232,36 @@ def winsorize_by_percentile(data, lower_percentile=5, upper_percentile=95):
             winsorized_df[column] = df[column]
 
     return winsorized_df.iloc[:, 0] if is_series else winsorized_df
+
+def cluster_data(data: pd.DataFrame, model, run_name: str, mlflow):
+    
+    results_df = data.copy()
+    PCA_components = 2
+
+    mlflow.set_tag("mlflow.runName", run_name)
+    mlflow.log_params({"PCA_components": PCA_components})
+    mlflow.log_params({"scaler": "RobustScaler"})
+
+    mlflow.autolog()
+    results_df['Cluster'] = model.fit_predict(data)
+
+    #Create cache folder if it doesn't exist
+    if not path.exists("cache"):
+        makedirs("cache")
+    
+    pca_fig, sum_explained_variance = get_pca(results_df, PCA_components)
+    mlflow.log_metrics({"pca_explained_variance": sum_explained_variance})
+    pca_fig.savefig("cache/pca_fig.png")
+    mlflow.log_artifact("cache/pca_fig.png")
+
+    mlflow.log_metrics({"davies_bouldin_score": davies_bouldin_score(data, results_df['Cluster'])})
+
+    silhouette_fig, silhouette_score = plot_silhouette(data, results_df['Cluster'])
+    mlflow.log_metrics({"silhouette_score": silhouette_score})
+    silhouette_fig.savefig("cache/silhouette_fig.png")
+    mlflow.log_artifact("cache/silhouette_fig.png")
+    
+    results_df.to_csv("cache/model.csv", index=True)
+    mlflow.log_artifact("cache/model.csv")
+
+    return results_df
