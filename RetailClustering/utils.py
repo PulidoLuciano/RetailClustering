@@ -4,10 +4,9 @@ from matplotlib.figure import Figure
 from sklearn.metrics import silhouette_samples, silhouette_score, davies_bouldin_score
 import seaborn as sns
 import numpy as np
-from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
-import dagster as dg
 from os import path, makedirs
 from scipy.cluster.hierarchy import dendrogram
+import math
 
 def get_devolutions(df: pd.DataFrame) -> pd.DataFrame:
     devoluciones_df = df[df['Quantity'] < 0]
@@ -260,8 +259,52 @@ def cluster_data(data: pd.DataFrame, model, run_name: str, mlflow):
     mlflow.log_metrics({"silhouette_score": silhouette_score})
     silhouette_fig.savefig("cache/silhouette_fig.png")
     mlflow.log_artifact("cache/silhouette_fig.png")
+
+    boxplot_fig = plot_boxplots(results_df, "Cluster")
+    boxplot_fig.savefig("cache/boxplot_fig.png")
+    mlflow.log_artifact("cache/boxplot_fig.png")
     
     results_df.to_csv("cache/model.csv", index=True)
     mlflow.log_artifact("cache/model.csv")
 
     return results_df
+
+def plot_boxplots(df, cluster_col: str, max_cols=3):
+    """
+    Crea un grid de violin plots para cada variable numérica en el DataFrame.
+
+    Parámetros:
+    -----------
+    df : pandas.DataFrame
+        El DataFrame con las variables a graficar.
+    figsize : tuple
+        Tamaño total de la figura.
+    max_cols : int
+        Número máximo de columnas en el grid de subplots.
+    """
+    numeric_cols = df.select_dtypes(include=np.number).columns
+    numeric_cols = np.delete(numeric_cols, numeric_cols.get_loc(cluster_col))
+    n_vars = len(numeric_cols)
+    
+    if n_vars == 0:
+        print("No hay variables numéricas para graficar.")
+        return
+
+    n_cols = min(n_vars, max_cols)
+    n_rows = math.ceil(n_vars / n_cols)
+    figsize = (8 * n_cols, 8 * n_rows)
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    axes = np.array(axes).reshape(-1)  # Asegura que axes sea plano
+
+    for i, col in enumerate(numeric_cols):
+        sns.boxplot(data=df, y=col, x=cluster_col, ax=axes[i])
+        axes[i].set_title(f'Boxplot: {col}')
+        axes[i].set_xlabel('Cluster')
+    
+    # Oculta subplots vacíos
+    for j in range(i + 1, len(axes)):
+        axes[j].axis('off')
+    
+    plt.tight_layout()
+    return fig
