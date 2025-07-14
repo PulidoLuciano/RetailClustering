@@ -97,6 +97,8 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
     scaled_df = pd.DataFrame(scaled_data, columns=winsorized_df.columns)
     return scaled_df
 
+    return scaled_df
+
 @dg.asset(
     dagster_type=pd.DataFrame,
     description="Clustering the RFM data with KMeans",
