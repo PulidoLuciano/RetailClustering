@@ -109,7 +109,7 @@ def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd
     from sklearn.cluster import KMeans
     mlflow = context.resources.mlflow_kmeans
     N_CLUSTERS = 4
-    RUN_NAME = "only_rfm"
+    RUN_NAME = "kmeans_rfm"
 
     model = KMeans(n_clusters=N_CLUSTERS)
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
@@ -127,7 +127,7 @@ def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd
 def clustered_dbscan_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.cluster import DBSCAN
     mlflow = context.resources.mlflow_dbscan
-    RUN_NAME = "only_rfm"
+    RUN_NAME = "dbscan_rfm"
 
     model = DBSCAN(eps=0.25, min_samples=20)
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
@@ -143,7 +143,7 @@ def clustered_dbscan_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd
 def clustered_agglomerative_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.cluster import AgglomerativeClustering
     mlflow = context.resources.mlflow_agglomerative
-    RUN_NAME = "only_rfm"
+    RUN_NAME = "agglomerative_rfm"
 
     model = AgglomerativeClustering(n_clusters=4, linkage="ward")
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
@@ -161,7 +161,7 @@ def clustered_agglomerative_data(context: dg.AssetExecutionContext, scaled_rfm_d
 def clustered_gaussian_mixture_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.mixture import GaussianMixture
     mlflow = context.resources.mlflow_gaussian_mixture
-    RUN_NAME = "only_rfm"
+    RUN_NAME = "gaussian_mixture_rfm"
     N_CLUSTERS = 4
 
     model = GaussianMixture(n_components=N_CLUSTERS)
