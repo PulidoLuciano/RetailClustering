@@ -88,14 +88,13 @@ def rfm_data(preprocessed_data: pd.DataFrame) -> pd.DataFrame:
     group_name="preprocessing",
 )
 def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
-    from sklearn.preprocessing import RobustScaler
     from .utils import winsorize_by_percentile
+    from sklearn.preprocessing import RobustScaler
     winsorized_df = winsorize_by_percentile(rfm_data, lower_percentile=10, upper_percentile=90)
     
     scaler = RobustScaler()
     scaled_data = scaler.fit_transform(winsorized_df)
-    scaled_data = pd.DataFrame(winsorized_df, columns=winsorized_df.columns)
-    return scaled_data
+    scaled_df = pd.DataFrame(scaled_data, columns=winsorized_df.columns)
 
 @dg.asset(
     dagster_type=pd.DataFrame,
@@ -143,9 +142,9 @@ def clustered_agglomerative_data(context: dg.AssetExecutionContext, scaled_rfm_d
     mlflow = context.resources.mlflow_agglomerative
     RUN_NAME = "only_rfm"
 
-    model = AgglomerativeClustering(n_clusters=4, linkage="ward", compute_distances=True)
+    model = AgglomerativeClustering(n_clusters=5, linkage="ward")
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
-    plot_dendrogram(model, mlflow)
+    #plot_dendrogram(model, mlflow)
     mlflow.end_run()
 
     return results_df
