@@ -24,5 +24,9 @@ defs = Definitions(
             "experiment_name": "agglomerative_clustering",
             "mlflow_tracking_uri": mlflow_tracking_uri,
         }),
+        "mlflow_gaussian_mixture": mlflow_tracking.configured({
+            "experiment_name": "gaussian_mixture_clustering",
+            "mlflow_tracking_uri": mlflow_tracking_uri,
+        }),
     }
 )

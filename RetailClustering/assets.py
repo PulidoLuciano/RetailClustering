@@ -95,6 +95,7 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
     scaler = RobustScaler()
     scaled_data = scaler.fit_transform(winsorized_df)
     scaled_df = pd.DataFrame(scaled_data, columns=winsorized_df.columns)
+    return scaled_df
 
 @dg.asset(
     dagster_type=pd.DataFrame,
@@ -126,7 +127,7 @@ def clustered_dbscan_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd
     mlflow = context.resources.mlflow_dbscan
     RUN_NAME = "only_rfm"
 
-    model = DBSCAN(eps=0.5, min_samples=5)
+    model = DBSCAN(eps=0.25, min_samples=20)
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
     mlflow.end_run()
     return results_df
@@ -142,10 +143,27 @@ def clustered_agglomerative_data(context: dg.AssetExecutionContext, scaled_rfm_d
     mlflow = context.resources.mlflow_agglomerative
     RUN_NAME = "only_rfm"
 
-    model = AgglomerativeClustering(n_clusters=5, linkage="ward")
+    model = AgglomerativeClustering(n_clusters=4, linkage="ward")
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
     #plot_dendrogram(model, mlflow)
     mlflow.end_run()
 
     return results_df
 
+@dg.asset(
+    dagster_type=pd.DataFrame,
+    description="Clustering the RFM data with Gaussian Mixture",
+    group_name="clustering",
+    required_resource_keys={"mlflow_gaussian_mixture"},
+)
+def clustered_gaussian_mixture_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
+    from sklearn.mixture import GaussianMixture
+    mlflow = context.resources.mlflow_gaussian_mixture
+    RUN_NAME = "only_rfm"
+    N_CLUSTERS = 4
+
+    model = GaussianMixture(n_components=N_CLUSTERS)
+    results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
+    mlflow.end_run()
+
+    return results_df
