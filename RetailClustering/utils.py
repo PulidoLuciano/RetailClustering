@@ -7,6 +7,7 @@ import numpy as np
 from os import path, makedirs
 from scipy.cluster.hierarchy import dendrogram
 import math
+from .metrics import ClusteringMetrics
 
 def get_devolutions(df: pd.DataFrame) -> pd.DataFrame:
     devoluciones_df = df[df['Quantity'] < 0]
@@ -257,6 +258,12 @@ def cluster_data(data: pd.DataFrame, model, run_name: str, mlflow):
 
     silhouette_fig, silhouette_score = plot_silhouette(data, results_df['Cluster'])
     mlflow.log_metrics({"silhouette_score": silhouette_score})
+
+
+    cm = ClusteringMetrics(data.copy())
+    metrics_dict = cm.get_metrics(model)
+    mlflow.log_metrics(metrics_dict)
+
     silhouette_fig.savefig("cache/silhouette_fig.png")
     mlflow.log_artifact("cache/silhouette_fig.png")
 

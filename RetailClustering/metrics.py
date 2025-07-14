@@ -168,12 +168,11 @@ class ClusteringMetrics:
         return fom
 
     # === Generacion de metricas por algoritmo de clustering 
-    def __generate_metrics(self, Model):
+    def get_metrics(self, model):
         X_full = self._df.values
         features = self._df.columns.tolist()
 
-        kmeans = Model()
-        labels_full = kmeans.fit_predict(X_full)
+        labels_full = model.fit_predict(X_full)
 
         apn_list = []
         ad_list = []
@@ -182,7 +181,7 @@ class ClusteringMetrics:
 
         for i, col in enumerate(features):
             X_minus = self._df.drop(columns=[col]).values
-            labels_minus = Model().fit_predict(X_minus)
+            labels_minus = model.fit_predict(X_minus)
 
             apn_val = self.__apn(labels_full, labels_minus)
             ad_val = abs(self.__intra_cluster_distances(X_full, labels_full) - 
@@ -225,167 +224,13 @@ class ClusteringMetrics:
         }
 
     def KMeans(self, n_clusters=4, random_state=42) -> dict:
-        Model = lambda: KMeans(n_clusters=n_clusters, random_state=random_state)
-        return self.__generate_metrics(Model)
+        return self.get_metrics(KMeans(n_clusters=n_clusters, random_state=random_state))
 
     def DBSCAN(self, eps=0.5, min_samples=5) -> dict:
-        Model = lambda: DBSCAN(eps=eps, min_samples=min_samples)
-        return self.__generate_metrics(Model)
+        return self.get_metrics(DBSCAN(eps=eps, min_samples=min_samples))
 
     def AgglomerativeClustering(self, n_clusters=4) -> dict:
-        Model = lambda: AgglomerativeClustering(n_clusters=n_clusters)
-        return self.__generate_metrics(Model)
-
-    def kmeans(self, n_clusters=4, random_state=42) -> dict:
-        X_full = self._df.values
-        features = self._df.columns.tolist()
-
-        kmeans = KMeans(n_clusters=n_clusters, random_state=random_state)
-        labels_full = kmeans.fit_predict(X_full)
-
-        apn_list = []
-        ad_list = []
-        adm_list = []
-        fom_list = []
-
-        for i, col in enumerate(features):
-            X_minus = self._df.drop(columns=[col]).values
-            labels_minus = KMeans(n_clusters=n_clusters, random_state=random_state).fit_predict(X_minus)
-
-            apn_val = self.__apn(labels_full, labels_minus)
-            ad_val = abs(self.__intra_cluster_distances(X_full, labels_full) - 
-                        self.__intra_cluster_distances(X_minus, labels_minus))
-            adm_val = abs(self.__average_distance_between_centroids(X_full, labels_full) -
-                        self.__average_distance_between_centroids(X_minus, labels_minus))
-
-            column_values = self._df[col].values
-            cluster_var = []
-            for label in np.unique(labels_minus):
-                if label == -1:
-                    continue
-                cluster_points = column_values[labels_minus == label]
-                if len(cluster_points) > 1:
-                    cluster_var.append(np.var(cluster_points))
-            fom_val = np.mean(cluster_var) if cluster_var else np.nan
-
-            apn_list.append(apn_val)
-            ad_list.append(ad_val)
-            adm_list.append(adm_val)
-            fom_list.append(fom_val)
-
-        dunn = self.__dunn_index(X_full, labels_full)
-        
-        # aqui hacemos resultados promedio
-        if self._verbose:
-            print(f"KMeans: ")
-            print(f"\t APN: \t {np.mean(apn_list):.4f}")
-            print(f"\t AD: \t {np.mean(ad_list):.4f}")
-            print(f"\t ADM: \t {np.mean(adm_list):.4f}")
-            print(f"\t FOM: \t {np.nanmean(fom_list):.4f}")
-            print(f"\t Dunn Index: {dunn:.4f}")
-
-        return {
-            "apn": round(np.mean(apn_list), 4),
-            "ad": round(np.mean(ad_list), 4),
-            "adm": round(np.mean(adm_list), 4),
-            "fom": round(np.nanmean(fom_list), 4) ,
-            "dunn": round(dunn, 4)
-        }
-
-    def dbscan(self, eps=0.5, min_samples=5) -> dict:
-
-        X_full = self._df.values
-        features = self._df.columns.tolist()
-
-        dbscan = DBSCAN(eps=eps, min_samples=min_samples)
-        labels_full = dbscan.fit_predict(X_full)
-
-        apn_list = []
-        ad_list = []
-        adm_list = []
-
-        for i, col in enumerate(features):
-            X_minus = self._df.drop(columns=[col]).values
-            labels_minus = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(X_minus)
-
-            apn_val = self.__apn(labels_full, labels_minus)
-            ad_val = abs(self.__intra_cluster_distances(X_full, labels_full) - 
-                        self.__intra_cluster_distances(X_minus, labels_minus))
-            adm_val = abs(self.__average_distance_between_centroids(X_full, labels_full) -
-                        self.__average_distance_between_centroids(X_minus, labels_minus))
-
-            apn_list.append(apn_val)
-            ad_list.append(ad_val)
-            adm_list.append(adm_val)
-
-        # Par DBSCAN, el dunn index necesita que hagamos limpieza de ruido
-        fom_val = self.__fom(self._df[col].values, labels_minus)
-        mask = labels_full != -1
-        X_clean = X_full[mask]
-        labels_clean = labels_full[mask]
-        dunn = self.__dunn_index(X_clean, labels_clean)
-
-        # aqui hacemos resultados promedio (ignorando NaN si hubo ruido total)
-        if self._verbose:
-            print(f"DBSCAN: ")
-            print(f"\t APN: \t {np.nanmean(apn_list):.4f}")
-            print(f"\t AD: \t {np.nanmean(ad_list):.4f}")
-            print(f"\t ADM: \t {np.nanmean(adm_list):.4f}")
-            print(f"\t FOM: \t {fom_val:.4f}")
-            print(f"\t Dunn Index: {dunn:.4f}")
-
-        return {
-            "apn": round(np.nanmean(apn_list), 4),
-            "ad": round(np.nanmean(ad_list), 4),
-            "adm": round(np.nanmean(adm_list), 4),
-            "fom": round(fom_val, 4) ,
-            "dunn": round(dunn, 4),
-        }
-
-    def agglomerative(self, n_clusters=4) -> dict:
-        X_full = self._df.values
-        features = self._df.columns.tolist()
-
-        agglo = AgglomerativeClustering(n_clusters=n_clusters)
-        labels_full = agglo.fit_predict(X_full)
-
-        apn_list = []
-        ad_list = []
-        adm_list = []
-
-        for i, col in enumerate(features):
-            X_minus = self._df.drop(columns=[col]).values
-            labels_minus = AgglomerativeClustering(n_clusters=n_clusters).fit_predict(X_minus)
-
-            apn_val = self.__apn(labels_full, labels_minus)
-            ad_val = abs(self.__intra_cluster_distances(X_full, labels_full) - 
-                        self.__intra_cluster_distances(X_minus, labels_minus))
-            adm_val = abs(self.__average_distance_between_centroids(X_full, labels_full) -
-                        self.__average_distance_between_centroids(X_minus, labels_minus))
-
-            apn_list.append(apn_val)
-            ad_list.append(ad_val)
-            adm_list.append(adm_val)
-
-        fom_val = self.__fom(self._df[col].values, labels_minus)
-        dunn = self.__dunn_index(X_full, labels_full)
-
-        # resultados promedio
-        if self._verbose:
-            print(f"Agglomerative: ")
-            print(f"\t APN: \t {np.mean(apn_list):.4f}")
-            print(f"\t AD: \t {np.mean(ad_list):.4f}")
-            print(f"\t ADM: \t {np.mean(adm_list):.4f}")
-            print(f"\t FOM: \t {fom_val:.4f}")
-            print(f"\t Dunn Index: {dunn:.4f}")
-
-        return {
-            "apn": round(np.nanmean(apn_list), 4),
-            "ad": round(np.nanmean(ad_list), 4),
-            "adm": round(np.nanmean(adm_list), 4),
-            "fom": round(fom_val, 4) ,
-            "dunn": round(dunn, 4),
-        }
+        return self.get_metrics(AgglomerativeClustering(n_clusters=n_clusters))
 
 # Testing with mock dataset.
 # blobs_data = make_blobs(n_samples=300, centers=3, cluster_std=0.60, random_state=42)
