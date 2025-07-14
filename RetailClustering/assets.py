@@ -91,10 +91,13 @@ def rfm_data(preprocessed_data: pd.DataFrame) -> pd.DataFrame:
     group_name="preprocessing",
 )
 def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
-    from sklearn.preprocessing import QuantileTransformer
-    scaler = QuantileTransformer(output_distribution='normal')
-    scaled_data = scaler.fit_transform(rfm_data[['Recency', 'Frequency', 'Monetary']])
-    scaled_data = pd.DataFrame(scaled_data, columns=['Recency', 'Frequency', 'Monetary'])
+    from sklearn.preprocessing import RobustScaler
+    from .utils import winsorize_by_percentile
+    winsorized_df = winsorize_by_percentile(rfm_data, lower_percentile=10, upper_percentile=90)
+    
+    scaler = RobustScaler()
+    scaled_data = scaler.fit_transform(winsorized_df)
+    scaled_data = pd.DataFrame(winsorized_df, columns=winsorized_df.columns)
     return scaled_data
 
 @dg.asset(
@@ -106,8 +109,7 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
 def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.cluster import KMeans
     from sklearn.metrics import davies_bouldin_score
-    from sklearn.utils import check_random_state
-    N_CLUSTERS = 6
+    N_CLUSTERS = 4
     PCA_components = 2
     RUN_NAME = "only_rfm"
 
@@ -116,7 +118,7 @@ def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd
     mlflow = context.resources.mlflow_kmeans
     mlflow.set_tag("mlflow.runName", RUN_NAME)
     mlflow.log_params({"PCA_components": PCA_components})
-    mlflow.log_params({"scaler": "QuantileTransformer"})
+    mlflow.log_params({"scaler": "RobustScaler"})
 
     mlflow.autolog()
     kmeans = KMeans(n_clusters=N_CLUSTERS)
@@ -139,7 +141,7 @@ def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd
     silhouette_fig.savefig("cache/silhouette_fig.png")
     mlflow.log_artifact("cache/silhouette_fig.png")
     
-    results_df.to_csv("cache/kmeans_model.csv")
+    results_df.to_csv("cache/kmeans_model.csv", index=True)
     mlflow.log_artifact("cache/kmeans_model.csv")
 
     mlflow.end_run()

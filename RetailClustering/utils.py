@@ -146,3 +146,60 @@ def plot_silhouette(X, labels):
     ax.set_yticks([])
     
     return fig, silhouette_avg
+
+def winsorize_by_percentile(data, lower_percentile=5, upper_percentile=95):
+    """
+    Aplica winsorización a un DataFrame o a una Serie de Pandas.
+
+    Los valores por debajo del percentil inferior se reemplazarán por el valor
+    del percentil inferior. Los valores por encima del percentil superior se
+    reemplazarán por el valor del percentil superior.
+
+    Parámetros:
+    -----------
+    data : pd.DataFrame o pd.Series
+        El conjunto de datos al que se aplicará la winsorización.
+        Si es un DataFrame, la winsorización se aplica columna por columna.
+        Si es una Serie, se aplica a la Serie.
+    lower_percentile : int o float, opcional (default=5)
+        El percentil inferior (e.g., 5 para el 5to percentil).
+        Debe estar entre 0 y 100.
+    upper_percentile : int o float, opcional (default=95)
+        El percentil superior (e.g., 95 para el 95to percentil).
+        Debe estar entre 0 y 100.
+
+    Retorna:
+    --------
+    pd.DataFrame o pd.Series
+        Los datos con la winsorización aplicada.
+    """
+
+    if not (0 <= lower_percentile < upper_percentile <= 100):
+        raise ValueError("Los percentiles deben estar entre 0 y 100, "
+                         "y lower_percentile debe ser menor que upper_percentile.")
+
+    # Convertir a DataFrame si la entrada es una Serie para manejar ambos casos uniformemente
+    if isinstance(data, pd.Series):
+        is_series = True
+        df = data.to_frame()
+    elif isinstance(data, pd.DataFrame):
+        is_series = False
+        df = data.copy() # Trabajar con una copia para no modificar el DataFrame original
+    else:
+        raise TypeError("La entrada debe ser un pd.DataFrame o pd.Series.")
+
+    winsorized_df = pd.DataFrame(index=df.index, columns=df.columns)
+
+    for column in df.columns:
+        # Asegurarse de que la columna sea numérica
+        if pd.api.types.is_numeric_dtype(df[column]):
+            lower_bound = np.percentile(df[column].dropna(), lower_percentile)
+            upper_bound = np.percentile(df[column].dropna(), upper_percentile)
+
+            winsorized_col = df[column].clip(lower=lower_bound, upper=upper_bound)
+            winsorized_df[column] = winsorized_col
+        else:
+            # Si no es numérica, simplemente copiar la columna
+            winsorized_df[column] = df[column]
+
+    return winsorized_df.iloc[:, 0] if is_series else winsorized_df
