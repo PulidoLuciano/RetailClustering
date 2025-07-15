@@ -8,6 +8,7 @@ from os import path, makedirs
 from scipy.cluster.hierarchy import dendrogram
 import math
 from .metrics import ClusteringMetrics
+import unicodedata
 
 def get_devolutions(df: pd.DataFrame) -> pd.DataFrame:
     devoluciones_df = df[df['Quantity'] < 0]
@@ -317,3 +318,9 @@ def plot_boxplots(df, cluster_col: str, max_cols=3):
     
     plt.tight_layout()
     return fig
+
+def normalize_text(text):
+    text = unicodedata.normalize('NFKD', text)
+    text = text.encode('ASCII', 'ignore').decode('utf-8')
+    text = text.lower().replace(" ", "")  # elimina todos los espacios
+    return text

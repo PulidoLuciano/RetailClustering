@@ -1,8 +1,19 @@
 import dagster as dg
 import pandas as pd
-from .utils import delete_cancelled_orders, cluster_data, plot_dendrogram
+from .utils import delete_cancelled_orders, cluster_data, plot_dendrogram, normalize_text
 from dagstermill import define_dagstermill_asset
 from os import path
+
+@dg.asset(
+    dagster_type=pd.DataFrame,
+    description='Categories of the products based on the description',
+    group_name="data_ingestion",
+)
+def category_data() -> pd.DataFrame:
+    categories = pd.read_csv(path.join(path.dirname(__file__), '../data/categorias.csv'), sep=';', encoding='utf-8')
+    categories['Description'] = categories['Description'].apply(normalize_text)
+    return categories
+
 @dg.asset(
     dagster_type=pd.DataFrame,
     description="Raw data from the online retail dataset",
@@ -40,11 +51,15 @@ def cleaned_data(raw_data: pd.DataFrame) -> pd.DataFrame:
     description="Data with the total price and right types",
     group_name="preprocessing",
 )
-def preprocessed_data(cleaned_data: pd.DataFrame) -> pd.DataFrame:
+def preprocessed_data(cleaned_data: pd.DataFrame, category_data: pd.DataFrame) -> pd.DataFrame:
     cleaned_data['TotalPrice'] = cleaned_data['Quantity'] * cleaned_data['UnitPrice']
     cleaned_data['InvoiceDate'] = pd.to_datetime(cleaned_data['InvoiceDate'])
     cleaned_data['CustomerID'] = cleaned_data['CustomerID'].astype(int)
     cleaned_data['InvoiceNo'] = cleaned_data['InvoiceNo'].astype(int)
+
+    cleaned_data['Month'] = cleaned_data['InvoiceDate'].dt.month
+    cleaned_data['Description'] = cleaned_data['Description'].apply(normalize_text)
+    cleaned_data = cleaned_data.merge(category_data, on='Description', how='left')
     return cleaned_data
 
 rfm_definitions_nb = define_dagstermill_asset(
@@ -97,8 +112,6 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
     scaled_df = pd.DataFrame(scaled_data, columns=winsorized_df.columns)
     return scaled_df
 
-    return scaled_df
-
 @dg.asset(
     dagster_type=pd.DataFrame,
     description="Clustering the RFM data with KMeans",
@@ -108,7 +121,7 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
 def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.cluster import KMeans
     mlflow = context.resources.mlflow_kmeans
-    N_CLUSTERS = 4
+    N_CLUSTERS = 3
     RUN_NAME = "kmeans_rfm"
 
     model = KMeans(n_clusters=N_CLUSTERS)
@@ -145,7 +158,7 @@ def clustered_agglomerative_data(context: dg.AssetExecutionContext, scaled_rfm_d
     mlflow = context.resources.mlflow_agglomerative
     RUN_NAME = "agglomerative_rfm"
 
-    model = AgglomerativeClustering(n_clusters=4, linkage="ward")
+    model = AgglomerativeClustering(n_clusters=3, linkage="ward")
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
     #plot_dendrogram(model, mlflow)
     mlflow.end_run()
@@ -162,7 +175,7 @@ def clustered_gaussian_mixture_data(context: dg.AssetExecutionContext, scaled_rf
     from sklearn.mixture import GaussianMixture
     mlflow = context.resources.mlflow_gaussian_mixture
     RUN_NAME = "gaussian_mixture_rfm"
-    N_CLUSTERS = 4
+    N_CLUSTERS = 3
 
     model = GaussianMixture(n_components=N_CLUSTERS)
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
