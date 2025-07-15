@@ -109,7 +109,7 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
     
     scaler = RobustScaler()
     scaled_data = scaler.fit_transform(winsorized_df)
-    scaled_df = pd.DataFrame(scaled_data, columns=winsorized_df.columns)
+    scaled_df = pd.DataFrame(scaled_data, columns=winsorized_df.columns, index=winsorized_df.index)
     return scaled_df
 
 @dg.asset(
@@ -121,7 +121,7 @@ def scaled_rfm_data(rfm_data: pd.DataFrame) -> pd.DataFrame:
 def clustered_kmeans_data(context: dg.AssetExecutionContext, scaled_rfm_data: pd.DataFrame) -> pd.DataFrame:
     from sklearn.cluster import KMeans
     mlflow = context.resources.mlflow_kmeans
-    N_CLUSTERS = 3
+    N_CLUSTERS = 4
     RUN_NAME = "kmeans_rfm"
 
     model = KMeans(n_clusters=N_CLUSTERS)
@@ -158,7 +158,7 @@ def clustered_agglomerative_data(context: dg.AssetExecutionContext, scaled_rfm_d
     mlflow = context.resources.mlflow_agglomerative
     RUN_NAME = "agglomerative_rfm"
 
-    model = AgglomerativeClustering(n_clusters=3, linkage="ward")
+    model = AgglomerativeClustering(n_clusters=4, linkage="ward")
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
     #plot_dendrogram(model, mlflow)
     mlflow.end_run()
@@ -175,10 +175,31 @@ def clustered_gaussian_mixture_data(context: dg.AssetExecutionContext, scaled_rf
     from sklearn.mixture import GaussianMixture
     mlflow = context.resources.mlflow_gaussian_mixture
     RUN_NAME = "gaussian_mixture_rfm"
-    N_CLUSTERS = 3
+    N_CLUSTERS = 4
 
     model = GaussianMixture(n_components=N_CLUSTERS)
     results_df = cluster_data(scaled_rfm_data, model, RUN_NAME, mlflow)
     mlflow.end_run()
 
     return results_df
+
+@dg.asset(
+    dagster_type=pd.DataFrame,
+    description="Choosed RFM model",
+    group_name="results",
+)
+def rfm_clusters() -> pd.DataFrame:
+    rfm_clusters = pd.read_csv(path.join(path.dirname(__file__), '../data/rfm_clusters.csv'), sep=',', encoding='utf-8')
+    return rfm_clusters
+
+rfm_results_nb = define_dagstermill_asset(
+    name="rfm_results_nb",
+    notebook_path=dg.file_relative_path(__file__, "./notebooks/results.ipynb"),
+    description="Results of the RFM model",
+    group_name="results",
+    ins={
+        "rfm_clusters": dg.AssetIn(key=dg.AssetKey("rfm_clusters")),
+        "preprocessed_data": dg.AssetIn(key=dg.AssetKey("preprocessed_data")),
+        "rfm_data": dg.AssetIn(key=dg.AssetKey("rfm_data")),
+        },
+)
